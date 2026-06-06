@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "group-golf",
+      "runtimeExecutable": "/Users/kiranphillips/.bun/bin/bun",
+      "runtimeArgs": ["--bun", "run", "dev"],
+      "port": 8080
+    }
+  ]
+}

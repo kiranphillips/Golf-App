@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"NO TEE BANNER\\\\|isClosed\\\\|teeBoxName.*showTeePanel\" /Users/kiranphillips/Downloads/group_golf/src/routes/groups.\\\\$gid.tee-times.\\\\$tid.scorecard.tsx | head -20)",
+      "Bash(grep -n \"fmtDateShort\\\\|Plane\\\\b\" /Users/kiranphillips/Downloads/group_golf/src/routes/groups.\\\\$gid.index.tsx)",
+      "Bash(mkdir -p /Users/kiranphillips/Downloads/group_golf/.claude)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(bun --version)",
+      "Bash(npm --version)",
+      "Read(//Users/kiranphillips/.bun/bin/**)",
+      "Read(//usr/local/**)",
+      "Bash(curl -fsSL https://bun.sh/install)",
+      "Bash(bash)",
+      "Bash(grep -n \"<>\\\\|</>\\\\|</MobileShell>\\\\|</section>\" /Users/kiranphillips/Downloads/group_golf/src/routes/groups.\\\\$gid.tee-times.\\\\$tid.scorecard.tsx | tail -20)",
+      "Bash(grep -n \"queryKey\\\\|trips-global\\\\|\\\\\"trips\\\\\"\" /Users/kiranphillips/Downloads/group_golf/src/routes/groups.\\\\$gid.trips.\\\\$tid.tsx | head -10)",
+      "Bash(grep -n \"trips\\\\|nextTrip\" /Users/kiranphillips/Downloads/group_golf/src/routes/groups.\\\\$gid.index.tsx | head -10)",
+      "Bash(curl -s 'https://vbreptbsrlpqypxngqpk.supabase.co/rest/v1/profiles?display_name=ilike.Kiran*&select=id,display_name' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZicmVwdGJzcmxwcXlweG5ncXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzYzNzAsImV4cCI6MjA5NTkxMjM3MH0.8Iloo_2G1TWBdQrMMh5XS6TwSfjsll4GVISM2WJQnNM' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZicmVwdGJzcmxwcXlweG5ncXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzYzNzAsImV4cCI6MjA5NTkxMjM3MH0.8Iloo_2G1TWBdQrMMh5XS6TwSfjsll4GVISM2WJQnNM')",
+      "Bash(curl -s -X POST https://vbreptbsrlpqypxngqpk.supabase.co/rest/v1/rpc/exec_sql -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZicmVwdGJzcmxwcXlweG5ncXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzYzNzAsImV4cCI6MjA5NTkxMjM3MH0.8Iloo_2G1TWBdQrMMh5XS6TwSfjsll4GVISM2WJQnNM')",
+      "Bash(curl -s -X POST https://vbreptbsrlpqypxngqpk.supabase.co/auth/v1/token?grant_type=password -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZicmVwdGJzcmxwcXlweG5ncXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzYzNzAsImV4cCI6MjA5NTkxMjM3MH0.8Iloo_2G1TWBdQrMMh5XS6TwSfjsll4GVISM2WJQnNM' -H 'Content-Type: application/json' -d '{\"email\":\"plan@auriadventure.com\",\"password\":\"Dainfern1024\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('USER_ID:', d.get\\('user',{}\\).get\\('id','ERROR'\\)\\); print\\('TOKEN:', d.get\\('access_token',''\\)[:40] if d.get\\('access_token'\\) else d.get\\('error_description','no token'\\)\\)\")",
+      "Bash(sed -i '' 's/const tz = typeof Intl !== \"undefined\" ? Intl.DateTimeFormat\\(\\).resolvedOptions\\(\\).timeZone : \"UTC\";//' '/Users/kiranphillips/Downloads/group_golf/src/routes/groups.$gid.tee-times.index.tsx' '/Users/kiranphillips/Downloads/group_golf/src/routes/groups.$gid.index.tsx')",
+      "Bash(sed -i '' 's/{ groupId: gid, timezone: tz }/{ groupId: gid }/' '/Users/kiranphillips/Downloads/group_golf/src/routes/groups.$gid.tee-times.index.tsx' '/Users/kiranphillips/Downloads/group_golf/src/routes/groups.$gid.index.tsx')"
+    ]
+  }
+}

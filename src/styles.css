@@ -1,0 +1,123 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Fairway Club — Private Golf Society Design System
+ * Luxury club palette: deep forest green, cream paper, charcoal ink, brushed gold accent.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Brand tokens */
+  --color-forest: var(--forest);
+  --color-forest-deep: var(--forest-deep);
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-charcoal: var(--charcoal);
+  --color-gold: var(--gold);
+  --color-gold-muted: var(--gold-muted);
+
+  --font-display: "Playfair Display", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px oklch(0 0 0 / 0.06);
+  --shadow-soft: 0 1px 2px oklch(0 0 0 / 0.03);
+
+  --tracking-club: 0.2em;
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Brand palette */
+  --forest: oklch(0.32 0.05 155);          /* #1A362F deep fairway green */
+  --forest-deep: oklch(0.24 0.04 155);
+  --cream: oklch(0.99 0.005 85);           /* #FDFDFB paper */
+  --paper: oklch(0.97 0.008 80);           /* slightly warmer surface */
+  --charcoal: oklch(0.22 0 0);             /* #262626 ink */
+  --gold: oklch(0.72 0.09 80);             /* #C5A059 brushed gold */
+  --gold-muted: oklch(0.72 0.09 80 / 0.18);
+
+  /* Shadcn mapping */
+  --background: var(--cream);
+  --foreground: var(--charcoal);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--charcoal);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--charcoal);
+  --primary: var(--forest);
+  --primary-foreground: var(--cream);
+  --secondary: oklch(0.95 0.008 80);
+  --secondary-foreground: var(--charcoal);
+  --muted: oklch(0.96 0.005 80);
+  --muted-foreground: oklch(0.5 0.01 80);
+  --accent: var(--gold);
+  --accent-foreground: var(--charcoal);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: var(--cream);
+  --border: oklch(0.91 0.005 80);
+  --input: oklch(0.91 0.005 80);
+  --ring: var(--forest);
+}
+
+.dark {
+  --background: var(--forest-deep);
+  --foreground: var(--cream);
+  --card: oklch(0.28 0.04 155);
+  --card-foreground: var(--cream);
+  --popover: oklch(0.28 0.04 155);
+  --popover-foreground: var(--cream);
+  --primary: var(--gold);
+  --primary-foreground: var(--charcoal);
+  --secondary: oklch(0.3 0.03 155);
+  --secondary-foreground: var(--cream);
+  --muted: oklch(0.3 0.03 155);
+  --muted-foreground: oklch(0.75 0.02 80);
+  --accent: var(--gold);
+  --accent-foreground: var(--charcoal);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.15);
+  --ring: var(--gold);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html, body {
+    background-color: oklch(0.94 0.005 80); /* stone wash behind phone frame */
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-display { font-family: var(--font-display); }
+  .tracking-club { letter-spacing: var(--tracking-club); }
+}
