@@ -484,6 +484,7 @@ export const startCasualRound = createServerFn({ method: "POST" })
       groupId: z.string().uuid(),
       courseName: z.string().min(2).max(120).optional(),
       timezone: z.string().max(60).optional(),
+      playerIds: z.array(z.string().uuid()).optional(),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
@@ -504,8 +505,9 @@ export const startCasualRound = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (error) throw error;
+    const playerIds = Array.from(new Set([userId, ...(data.playerIds ?? [])]));
     await supabase.from("rsvps").upsert(
-      { tee_time_id: tt.id, user_id: userId, status: "in", updated_at: new Date().toISOString() },
+      playerIds.map((uid) => ({ tee_time_id: tt.id, user_id: uid, status: "in", updated_at: new Date().toISOString() })),
       { onConflict: "tee_time_id,user_id" },
     );
     await ensureTeeTimeHoles(supabase, tt.id);
@@ -1101,7 +1103,7 @@ export const getLeaderboard = createServerFn({ method: "GET" })
         handicap: profMap.get(uid)?.handicap,
         ...v,
       }))
-      .sort((a, b) => b.points - a.points);
+      .sort((a, b) => b.points - a.points || a.rounds - b.rounds || a.name.localeCompare(b.name));
   });
 
 // -------- CHAT --------
@@ -1239,21 +1241,28 @@ export const getGroupHome = createServerFn({ method: "GET" })
       }
     }
 
-    const year = new Date().getUTCFullYear();
-    const { data: seasonRows } = await supabase
+    const year = new Date().getFullYear();
+    const { data: seasonRows, error: seasonError } = await supabase
       .from("season_scores")
-      .select("user_id, points, profiles:user_id(display_name)")
+      .select("user_id, points")
       .eq("group_id", data.groupId)
       .eq("season_year", year);
-    const totals = new Map<string, { name: string; points: number }>();
+    if (seasonError) throw seasonError;
+    const totals = new Map<string, { points: number; rounds: number }>();
     for (const r of (seasonRows ?? []) as any[]) {
-      const cur = totals.get(r.user_id) ?? { name: r.profiles?.display_name ?? "Player", points: 0 };
+      const cur = totals.get(r.user_id) ?? { points: 0, rounds: 0 };
       cur.points += r.points ?? 0;
+      cur.rounds += 1;
       totals.set(r.user_id, cur);
     }
+    const seasonUserIds = [...totals.keys()];
+    const { data: seasonProfiles } = seasonUserIds.length
+      ? await supabase.from("profiles").select("id, display_name").in("id", seasonUserIds)
+      : { data: [] as any[] };
+    const seasonNameMap = new Map((seasonProfiles ?? []).map((p: any) => [p.id, p.display_name]));
     const leaderboardTop3 = [...totals.entries()]
-      .map(([uid, v]) => ({ userId: uid, name: v.name, points: v.points }))
-      .sort((a, b) => b.points - a.points)
+      .map(([uid, v]) => ({ userId: uid, name: seasonNameMap.get(uid) ?? "Player", points: v.points, rounds: v.rounds }))
+      .sort((a, b) => b.points - a.points || a.rounds - b.rounds || a.name.localeCompare(b.name))
       .slice(0, 3);
 
     // Trips show on the overview only once an admin has confirmed the member's interest ("in").
