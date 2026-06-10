@@ -6,7 +6,7 @@ import { MobileShell } from "@/components/MobileShell";
 import { supabase } from "@/integrations/supabase/client";
 import { listTeeTimes, createTeeTime, searchCourses, startCasualRound, startScheduledRound, deleteTeeTime, updateTeeTime } from "@/lib/api.functions";
 import { fmtDateLong, fmtTime } from "@/lib/format";
-import { Plus, ChevronRight, MapPin, Loader2, Zap, Pencil, Trash2, Play } from "lucide-react";
+import { Plus, ChevronRight, MapPin, Loader2, Zap, Pencil, Trash2, Play, Search, X, CheckCircle2 } from "lucide-react";
 import { FORMAT_LABELS, type GameFormat } from "@/lib/scoring";
 import { toast } from "sonner";
 
@@ -30,26 +30,12 @@ function Page() {
   const { data: rows } = useSuspenseQuery(q(gid));
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [casualBusy, setCasualBusy] = useState(false);
+  const [showCourseSheet, setShowCourseSheet] = useState(false);
   const startCasual = useServerFn(startCasualRound);
   const startScheduledRoundFn = useServerFn(startScheduledRound);
   const removeTeeTime = useServerFn(deleteTeeTime);
   const qc = useQueryClient();
   const navigate = useNavigate();
-
-  const playToday = async () => {
-    setCasualBusy(true);
-    try {
-      
-      const res = await startCasual({ data: { groupId: gid } });
-      qc.invalidateQueries({ queryKey: ["tee-times", gid] }); // fire-and-forget, don't await
-      navigate({ to: "/groups/$gid/tee-times/$tid/scorecard" as any, params: { gid, tid: (res as any).id } as any });
-    } catch (e: any) {
-      toast.error(e.message ?? "Couldn't start round");
-    } finally {
-      setCasualBusy(false);
-    }
-  };
 
   const deleteExisting = async (teeTimeId: string) => {
     if (!window.confirm("Are you sure you want to delete this tee time?")) return;
@@ -83,13 +69,26 @@ function Page() {
           <Plus className="size-4" /> {creating ? "Cancel" : "Schedule"}
         </button>
         <button
-          onClick={playToday}
-          disabled={casualBusy}
-          className="flex items-center justify-center gap-2 bg-gold text-charcoal rounded-2xl py-4 text-[11px] font-bold uppercase tracking-club disabled:opacity-60"
+          onClick={() => setShowCourseSheet(true)}
+          className="flex items-center justify-center gap-2 bg-gold text-charcoal rounded-2xl py-4 text-[11px] font-bold uppercase tracking-club"
         >
-          {casualBusy ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />} Start Casual
+          <Zap className="size-4" /> Start Casual
         </button>
       </section>
+      {showCourseSheet && (
+        <CoursePickerSheet
+          onCancel={() => setShowCourseSheet(false)}
+          onStart={async (courseName) => {
+            setShowCourseSheet(false);
+            try {
+              const res = await startCasual({ data: { groupId: gid, courseName } });
+              qc.invalidateQueries({ queryKey: ["tee-times", gid] });
+              navigate({ to: "/groups/$gid/tee-times/$tid/scorecard" as any, params: { gid, tid: (res as any).id } as any });
+            } catch (e: any) { toast.error(e.message ?? "Couldn't start round"); }
+          }}
+        />
+      )}
+
       {creating && <CreateForm gid={gid} onDone={() => setCreating(false)} />}
 
       <section className="px-6 mt-6 space-y-3 pb-6">
@@ -308,6 +307,106 @@ function EditTeeTimeForm({ teeTime, onCancel, onDone }: { teeTime: any; onCancel
         </button>
       </div>
     </form>
+  );
+}
+
+// ─── COURSE PICKER SHEET (casual round) ──────────────────────────────────────
+function CoursePickerSheet({ onCancel, onStart }: { onCancel: () => void; onStart: (courseName: string) => void }) {
+  const [query,    setQuery]    = useState("");
+  const [results,  setResults]  = useState<Array<{ id: string; name: string; place: string | null }>>([]);
+  const [busy,     setBusy]     = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [selected, setSelected] = useState("");
+  const doSearch = useServerFn(searchCourses);
+  const tRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (tRef.current) clearTimeout(tRef.current);
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    tRef.current = setTimeout(async () => {
+      setBusy(true);
+      try { const res = await doSearch({ data: { query: q } }); setResults(res.results ?? []); }
+      catch {} finally { setBusy(false); }
+    }, 400);
+    return () => { if (tRef.current) clearTimeout(tRef.current); };
+  }, [query, doSearch]);
+
+  const pick = (name: string) => { setSelected(name); setQuery(name); setResults([]); };
+
+  const start = () => {
+    const name = selected || query.trim();
+    if (!name) { toast.error("Enter a course name"); return; }
+    setStarting(true);
+    onStart(name);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onCancel} />
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col">
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+        <div className="px-5 pb-3 shrink-0 flex items-center justify-between">
+          <div>
+            <h2 className="font-display text-xl">Start casual round</h2>
+            <p className="text-xs text-muted-foreground">Which course are you playing?</p>
+          </div>
+          <button onClick={onCancel} className="size-9 rounded-full bg-paper border border-border grid place-items-center">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="px-5 pb-3 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <input ref={inputRef} value={query} onChange={e => { setQuery(e.target.value); setSelected(""); }}
+              placeholder="Search course name…"
+              className="w-full bg-paper border border-border rounded-xl pl-9 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-forest" />
+            {query && (
+              <button type="button" onClick={() => { setQuery(""); setSelected(""); setResults([]); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-2">
+          {busy && <div className="flex justify-center py-6"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>}
+          {!busy && results.length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              {results.map(r => (
+                <button key={r.id} onClick={() => pick(r.name)}
+                  className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${selected === r.name ? "border-forest bg-forest/5" : "border-border bg-white"}`}>
+                  <MapPin className="size-4 text-gold shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{r.name}</p>
+                    {r.place && <p className="text-[10px] text-muted-foreground truncate">{r.place}</p>}
+                  </div>
+                  {selected === r.name && <CheckCircle2 className="size-4 text-forest ml-auto shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+          {!busy && query.trim().length >= 2 && results.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-4">No courses found — type the name and start anyway.</p>
+          )}
+          {!busy && query.trim().length < 2 && (
+            <p className="text-[10px] text-muted-foreground text-center py-4">Type at least 2 characters to search.</p>
+          )}
+        </div>
+        <div className="px-5 pb-8 pt-3 shrink-0 border-t border-border">
+          <button onClick={start} disabled={starting || (!selected && query.trim().length < 2)}
+            className="w-full bg-gold text-charcoal py-3.5 rounded-full text-sm font-bold uppercase tracking-club flex items-center justify-center gap-2 disabled:opacity-50">
+            {starting ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+            {starting ? "Starting…" : "Start round"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 

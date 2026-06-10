@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
+import { ImageUploadField } from "@/components/ImageUploadField";
 import { supabase } from "@/integrations/supabase/client";
 import { listTrips, createTrip, getMyProfile } from "@/lib/api.functions";
 import { fmtDateShort } from "@/lib/format";
@@ -11,8 +12,9 @@ import {
   Plus, ChevronRight, CalendarDays, Users, Loader2, MapPin, Plane, CheckCircle2, Clock,
 } from "lucide-react";
 
-// Trips are global — no groupId filter needed
-const tripsQ   = queryOptions({ queryKey: ["trips-global"], queryFn: () => listTrips() });
+// Trips are global, but interest counts are scoped to the current group
+const tripsQ = (gid: string) =>
+  queryOptions({ queryKey: ["trips-global", gid], queryFn: () => listTrips({ data: { groupId: gid } }) });
 const profileQ = queryOptions({ queryKey: ["my-profile"],   queryFn: () => getMyProfile() });
 
 export const Route = createFileRoute("/groups/$gid/trips")({
@@ -21,9 +23,9 @@ export const Route = createFileRoute("/groups/$gid/trips")({
     const { data } = await supabase.auth.getSession();
     if (!data.session) throw redirect({ to: "/auth" });
   },
-  loader: ({ context }: { context: any }) =>
+  loader: ({ context, params }: { context: any; params: { gid: string } }) =>
     Promise.all([
-      context.queryClient.ensureQueryData(tripsQ),
+      context.queryClient.ensureQueryData(tripsQ(params.gid)),
       context.queryClient.ensureQueryData(profileQ),
     ]),
   component: Page,
@@ -39,7 +41,7 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
 
 function Page() {
   const { gid }       = Route.useParams();
-  const { data: trips }   = useSuspenseQuery(tripsQ);
+  const { data: trips }   = useSuspenseQuery(tripsQ(gid));
   const { data: profile } = useSuspenseQuery(profileQ);
   const qc            = useQueryClient();
   const isOwner       = !!(profile as any)?.is_app_owner;
@@ -172,7 +174,7 @@ function TripCard({ trip, gid, muted = false }: { trip: any; gid: string; muted?
             <div className="text-right ml-auto">
               <p className="text-[10px] uppercase tracking-club text-muted-foreground">From</p>
               <p className="font-display text-xl text-forest">
-                £{Number(trip.cost).toLocaleString()}<span className="text-[11px] font-sans text-muted-foreground"> pp</span>
+                ${Number(trip.cost).toLocaleString()}<span className="text-[11px] font-sans text-muted-foreground"> pp</span>
               </p>
             </div>
           ) : <div />}
@@ -198,7 +200,6 @@ function CreateTripForm({ onDone }: { onDone: () => void }) {
   const [notes,       setNotes]       = useState("");
   const [inclusions,  setInclusions]  = useState("");
   const [golfCourses, setGolfCourses] = useState("");
-  const [contact,     setContact]     = useState("");
   const [coverUrl,    setCoverUrl]    = useState("");
   const [busy,        setBusy]        = useState(false);
   const create = useServerFn(createTrip);
@@ -216,7 +217,6 @@ function CreateTripForm({ onDone }: { onDone: () => void }) {
           notes: notes || undefined,
           inclusions: inclusions || undefined,
           golfCourses: golfCourses || undefined,
-          agencyContact: contact || undefined,
           coverUrl: coverUrl || undefined,
         },
       });
@@ -252,7 +252,7 @@ function CreateTripForm({ onDone }: { onDone: () => void }) {
           <input required type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={cls} />
         </label>
         <label className="block">
-          <span className={lbl}>Price pp (£)</span>
+          <span className={lbl}>Price pp ($)</span>
           <input type="number" min={0} step={0.01} value={cost} onChange={e => setCost(e.target.value)} placeholder="1,495" className={cls} />
         </label>
         <label className="block">
@@ -263,9 +263,8 @@ function CreateTripForm({ onDone }: { onDone: () => void }) {
           <span className={lbl}>Booking deadline</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className={cls} />
         </label>
-        <label className="block">
-          <span className={lbl}>Cover image URL</span>
-          <input type="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://…" className={cls} />
+        <label className="col-span-2 block">
+          <ImageUploadField label="Cover image" value={coverUrl} onChange={setCoverUrl} />
         </label>
         <label className="col-span-2 block">
           <span className={lbl}>Golf courses</span>
@@ -279,10 +278,6 @@ function CreateTripForm({ onDone }: { onDone: () => void }) {
         <label className="col-span-2 block">
           <span className={lbl}>Overview</span>
           <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} className={cls} />
-        </label>
-        <label className="col-span-2 block">
-          <span className={lbl}>Contact</span>
-          <input value={contact} onChange={e => setContact(e.target.value)} placeholder="info@auriadventures.com · +44…" className={cls} />
         </label>
       </div>
 

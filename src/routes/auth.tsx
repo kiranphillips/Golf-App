@@ -10,9 +10,11 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+type Mode = "signin" | "signup" | "reset";
+
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -22,6 +24,15 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth`,
+        });
+        if (error) throw error;
+        toast.success("Password reset email sent — check your inbox.");
+        setMode("signin");
+        return;
+      }
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,
@@ -32,7 +43,7 @@ function AuthPage() {
           },
         });
         if (error) throw error;
-        toast.success("Welcome to the Club");
+        toast.success("Welcome to the Club — check your email to verify your account.");
         navigate({ to: "/" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -40,8 +51,9 @@ function AuthPage() {
         navigate({ to: "/" });
       }
     } catch (err: unknown) {
-      // Keep error messages generic to avoid leaking whether an email exists
-      if (mode === "signup") {
+      if (mode === "reset") {
+        toast.error("Couldn't send reset email. Check the address and try again.");
+      } else if (mode === "signup") {
         toast.error("Couldn't create account. Try a stronger password or a different email.");
       } else {
         toast.error("Sign in failed. Check your email and password.");
@@ -50,6 +62,49 @@ function AuthPage() {
       setLoading(false);
     }
   };
+
+  if (mode === "reset") {
+    return (
+      <div className="min-h-screen flex justify-center">
+        <div className="w-full max-w-md min-h-screen bg-cream shadow-2xl flex flex-col">
+          <div className="bg-forest text-cream px-8 pt-16 pb-12 text-center">
+            <p className="text-[10px] uppercase tracking-club text-gold mb-2">Members Only</p>
+            <h1 className="font-display text-4xl leading-tight">Fairway Club</h1>
+          </div>
+          <form onSubmit={handleSubmit} className="px-8 py-10 space-y-5">
+            <div>
+              <h2 className="font-display text-2xl mb-1">Reset password</h2>
+              <p className="text-sm text-muted-foreground">We'll email you a link to set a new password.</p>
+            </div>
+            <Field label="Email">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@club.com"
+                className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-forest"
+              />
+            </Field>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-forest text-cream py-3.5 rounded-full text-xs font-bold uppercase tracking-club disabled:opacity-60"
+            >
+              {loading ? "Sending…" : "Send reset link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className="w-full text-[10px] uppercase tracking-club text-muted-foreground text-center"
+            >
+              ← Back to sign in
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex justify-center">
@@ -111,6 +166,16 @@ function AuthPage() {
               className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-forest"
             />
           </Field>
+
+          {mode === "signin" && (
+            <button
+              type="button"
+              onClick={() => setMode("reset")}
+              className="w-full text-right text-[11px] text-forest font-semibold -mt-2"
+            >
+              Forgot password?
+            </button>
+          )}
 
           <button
             type="submit"

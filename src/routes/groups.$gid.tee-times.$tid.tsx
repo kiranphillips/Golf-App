@@ -153,7 +153,7 @@ function Page() {
           disabled={nudgeBusy}
           className="w-full flex items-center justify-center gap-2 bg-gold text-charcoal rounded-xl py-3 text-[11px] font-bold uppercase tracking-wider disabled:opacity-60"
         >
-          <BellRing className="size-4" /> {nudgeBusy ? "Posting…" : "Nudge group to RSVP"}
+          <BellRing className="size-4" /> {nudgeBusy ? "Posting to chat…" : "Nudge group (posts to chat)"}
         </button>
       </section>
 

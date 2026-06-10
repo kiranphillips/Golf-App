@@ -21,7 +21,7 @@ import { Route as GroupsGidLeaderboardRouteImport } from './routes/groups.$gid.l
 import { Route as GroupsGidChatRouteImport } from './routes/groups.$gid.chat'
 import { Route as GroupsGidAdminRouteImport } from './routes/groups.$gid.admin'
 import { Route as GroupsGidTeeTimesIndexRouteImport } from './routes/groups.$gid.tee-times.index'
-import { Route as GroupsGidTripsTidRouteImport } from './routes/groups.$gid.trips.$tid'
+import { Route as GroupsGidTripsTidRouteImport } from './routes/groups.$gid.trips_.$tid'
 import { Route as GroupsGidTeeTimesTidRouteImport } from './routes/groups.$gid.tee-times.$tid'
 import { Route as GroupsGidTeeTimesTidScorecardRouteImport } from './routes/groups.$gid.tee-times.$tid.scorecard'
 
@@ -86,9 +86,9 @@ const GroupsGidTeeTimesIndexRoute = GroupsGidTeeTimesIndexRouteImport.update({
   getParentRoute: () => GroupsGidRoute,
 } as any)
 const GroupsGidTripsTidRoute = GroupsGidTripsTidRouteImport.update({
-  id: '/$tid',
-  path: '/$tid',
-  getParentRoute: () => GroupsGidTripsRoute,
+  id: '/trips_/$tid',
+  path: '/trips/$tid',
+  getParentRoute: () => GroupsGidRoute,
 } as any)
 const GroupsGidTeeTimesTidRoute = GroupsGidTeeTimesTidRouteImport.update({
   id: '/tee-times/$tid',
@@ -112,7 +112,7 @@ export interface FileRoutesByFullPath {
   '/groups/$gid/chat': typeof GroupsGidChatRoute
   '/groups/$gid/leaderboard': typeof GroupsGidLeaderboardRoute
   '/groups/$gid/members': typeof GroupsGidMembersRoute
-  '/groups/$gid/trips': typeof GroupsGidTripsRouteWithChildren
+  '/groups/$gid/trips': typeof GroupsGidTripsRoute
   '/groups/$gid/': typeof GroupsGidIndexRoute
   '/groups/$gid/tee-times/$tid': typeof GroupsGidTeeTimesTidRouteWithChildren
   '/groups/$gid/trips/$tid': typeof GroupsGidTripsTidRoute
@@ -128,7 +128,7 @@ export interface FileRoutesByTo {
   '/groups/$gid/chat': typeof GroupsGidChatRoute
   '/groups/$gid/leaderboard': typeof GroupsGidLeaderboardRoute
   '/groups/$gid/members': typeof GroupsGidMembersRoute
-  '/groups/$gid/trips': typeof GroupsGidTripsRouteWithChildren
+  '/groups/$gid/trips': typeof GroupsGidTripsRoute
   '/groups/$gid': typeof GroupsGidIndexRoute
   '/groups/$gid/tee-times/$tid': typeof GroupsGidTeeTimesTidRouteWithChildren
   '/groups/$gid/trips/$tid': typeof GroupsGidTripsTidRoute
@@ -146,10 +146,10 @@ export interface FileRoutesById {
   '/groups/$gid/chat': typeof GroupsGidChatRoute
   '/groups/$gid/leaderboard': typeof GroupsGidLeaderboardRoute
   '/groups/$gid/members': typeof GroupsGidMembersRoute
-  '/groups/$gid/trips': typeof GroupsGidTripsRouteWithChildren
+  '/groups/$gid/trips': typeof GroupsGidTripsRoute
   '/groups/$gid/': typeof GroupsGidIndexRoute
   '/groups/$gid/tee-times/$tid': typeof GroupsGidTeeTimesTidRouteWithChildren
-  '/groups/$gid/trips/$tid': typeof GroupsGidTripsTidRoute
+  '/groups/$gid/trips_/$tid': typeof GroupsGidTripsTidRoute
   '/groups/$gid/tee-times/': typeof GroupsGidTeeTimesIndexRoute
   '/groups/$gid/tee-times/$tid/scorecard': typeof GroupsGidTeeTimesTidScorecardRoute
 }
@@ -201,7 +201,7 @@ export interface FileRouteTypes {
     | '/groups/$gid/trips'
     | '/groups/$gid/'
     | '/groups/$gid/tee-times/$tid'
-    | '/groups/$gid/trips/$tid'
+    | '/groups/$gid/trips_/$tid'
     | '/groups/$gid/tee-times/'
     | '/groups/$gid/tee-times/$tid/scorecard'
   fileRoutesById: FileRoutesById
@@ -300,12 +300,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GroupsGidTeeTimesIndexRouteImport
       parentRoute: typeof GroupsGidRoute
     }
-    '/groups/$gid/trips/$tid': {
-      id: '/groups/$gid/trips/$tid'
-      path: '/$tid'
+    '/groups/$gid/trips_/$tid': {
+      id: '/groups/$gid/trips_/$tid'
+      path: '/trips/$tid'
       fullPath: '/groups/$gid/trips/$tid'
       preLoaderRoute: typeof GroupsGidTripsTidRouteImport
-      parentRoute: typeof GroupsGidTripsRoute
+      parentRoute: typeof GroupsGidRoute
     }
     '/groups/$gid/tee-times/$tid': {
       id: '/groups/$gid/tee-times/$tid'
@@ -324,18 +324,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface GroupsGidTripsRouteChildren {
-  GroupsGidTripsTidRoute: typeof GroupsGidTripsTidRoute
-}
-
-const GroupsGidTripsRouteChildren: GroupsGidTripsRouteChildren = {
-  GroupsGidTripsTidRoute: GroupsGidTripsTidRoute,
-}
-
-const GroupsGidTripsRouteWithChildren = GroupsGidTripsRoute._addFileChildren(
-  GroupsGidTripsRouteChildren,
-)
-
 interface GroupsGidTeeTimesTidRouteChildren {
   GroupsGidTeeTimesTidScorecardRoute: typeof GroupsGidTeeTimesTidScorecardRoute
 }
@@ -352,9 +340,10 @@ interface GroupsGidRouteChildren {
   GroupsGidChatRoute: typeof GroupsGidChatRoute
   GroupsGidLeaderboardRoute: typeof GroupsGidLeaderboardRoute
   GroupsGidMembersRoute: typeof GroupsGidMembersRoute
-  GroupsGidTripsRoute: typeof GroupsGidTripsRouteWithChildren
+  GroupsGidTripsRoute: typeof GroupsGidTripsRoute
   GroupsGidIndexRoute: typeof GroupsGidIndexRoute
   GroupsGidTeeTimesTidRoute: typeof GroupsGidTeeTimesTidRouteWithChildren
+  GroupsGidTripsTidRoute: typeof GroupsGidTripsTidRoute
   GroupsGidTeeTimesIndexRoute: typeof GroupsGidTeeTimesIndexRoute
 }
 
@@ -363,9 +352,10 @@ const GroupsGidRouteChildren: GroupsGidRouteChildren = {
   GroupsGidChatRoute: GroupsGidChatRoute,
   GroupsGidLeaderboardRoute: GroupsGidLeaderboardRoute,
   GroupsGidMembersRoute: GroupsGidMembersRoute,
-  GroupsGidTripsRoute: GroupsGidTripsRouteWithChildren,
+  GroupsGidTripsRoute: GroupsGidTripsRoute,
   GroupsGidIndexRoute: GroupsGidIndexRoute,
   GroupsGidTeeTimesTidRoute: GroupsGidTeeTimesTidRouteWithChildren,
+  GroupsGidTripsTidRoute: GroupsGidTripsTidRoute,
   GroupsGidTeeTimesIndexRoute: GroupsGidTeeTimesIndexRoute,
 }
 

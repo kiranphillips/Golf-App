@@ -27,6 +27,7 @@ function ProfilePage() {
   const update = useServerFn(updateMyProfile);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(profile?.display_name ?? "");
@@ -34,11 +35,16 @@ function ProfilePage() {
   }, [profile]);
 
   const save = async () => {
+    setSaving(true);
     try {
       await update({ data: { displayName: name, handicap: handicap === "" ? undefined : Number(handicap) } });
       toast.success("Profile saved");
       qc.invalidateQueries({ queryKey: ["my-profile"] });
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) {
+      toast.error(e.message ?? "Couldn't save profile");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const signOut = async () => {
@@ -61,9 +67,9 @@ function ProfilePage() {
               Your WHS handicap index (e.g. 14.2). The app converts this to a course handicap using each tee box's rating and slope — making every game fair regardless of where you play.
             </p>
           </Field>
-          <button onClick={save}
-            className="w-full bg-forest text-cream py-3 rounded-full text-xs font-bold uppercase tracking-club">
-            Save profile
+          <button onClick={save} disabled={saving} type="button"
+            className="w-full bg-forest text-cream py-3 rounded-full text-xs font-bold uppercase tracking-club disabled:opacity-60">
+            {saving ? "Saving…" : "Save profile"}
           </button>
         </div>
       </section>

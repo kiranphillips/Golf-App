@@ -8,12 +8,13 @@ import {
   listMyGroups, lookupGroupByCode, requestJoinByCode, createGroup,
   listMyPendingRequests, listUpcomingAcrossGroups,
   searchGroups, requestJoinGroupById, cancelJoinRequest,
+  updateGroupVisibility,
 } from "@/lib/api.functions";
 import { fmtDateShort, fmtTime } from "@/lib/format";
 import { toast } from "sonner";
 import {
   Plus, KeyRound, ChevronRight, Clock, Hourglass,
-  Search, Globe, Lock, Users, X, Loader2, MapPin, Trash2,
+  Search, Globe, Lock, Users, X, Loader2, MapPin, Trash2, Eye, EyeOff,
 } from "lucide-react";
 
 const groupsQ   = queryOptions({ queryKey: ["my-groups"],       queryFn: () => listMyGroups() });
@@ -243,18 +244,23 @@ function JoinForm({ onDone, initialCode = "" }: { onDone: () => void; initialCod
 
 // ─── CREATE CLUBHOUSE ─────────────────────────────────────────────────────────
 function CreateForm({ onDone }: { onDone: () => void }) {
-  const [name,   setName]   = useState("");
-  const [kicker, setKicker] = useState("");
-  const [busy,   setBusy]   = useState(false);
-  const create   = useServerFn(createGroup);
-  const qc       = useQueryClient();
-  const navigate = useNavigate();
+  const [name,     setName]     = useState("");
+  const [kicker,   setKicker]   = useState("");
+  const [isPublic, setIsPublic] = useState(false);
+  const [busy,     setBusy]     = useState(false);
+  const create     = useServerFn(createGroup);
+  const setVis     = useServerFn(updateGroupVisibility);
+  const qc         = useQueryClient();
+  const navigate   = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
       const g = await create({ data: { name, kicker: kicker || undefined } });
+      if (isPublic) {
+        await setVis({ data: { groupId: g.id, isPublic: true } }).catch(() => {});
+      }
       toast.success(`Clubhouse created — share code ${g.invite_code}`);
       qc.invalidateQueries({ queryKey: ["my-groups"] });
       onDone();
@@ -279,6 +285,23 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         placeholder="Tagline (optional)"
         className="w-full bg-paper rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-forest"
       />
+      {/* Public / Private toggle */}
+      <button
+        type="button"
+        onClick={() => setIsPublic(p => !p)}
+        className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors text-sm ${isPublic ? "bg-forest/5 border-forest/30 text-forest" : "bg-paper border-border text-charcoal"}`}
+      >
+        {isPublic ? <Globe className="size-4 shrink-0" /> : <Lock className="size-4 shrink-0" />}
+        <div className="flex-1 text-left">
+          <p className="font-semibold text-xs">{isPublic ? "Public group" : "Private group"}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {isPublic ? "Anyone can find and request to join" : "Invite-only — share your code to invite people"}
+          </p>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-club text-muted-foreground">
+          {isPublic ? "tap to make private" : "tap to make public"}
+        </span>
+      </button>
       <button
         type="submit"
         disabled={busy || name.length < 2}

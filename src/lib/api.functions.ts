@@ -13,6 +13,64 @@ function checkIsOwner(context: { claims?: any }): boolean {
   return owners.includes(email);
 }
 
+// Sends a transactional email via Resend if RESEND_API_KEY is configured.
+// No-ops silently if not configured, so this never breaks the calling flow.
+async function sendNotificationEmail(opts: { to: string; subject: string; text: string }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("RESEND_API_KEY not set — skipping notification email");
+    return;
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM_EMAIL ?? "Fairway Club <onboarding@resend.dev>",
+      to: [opts.to],
+      subject: opts.subject,
+      text: opts.text,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Resend API error: ${res.status} ${await res.text()}`);
+  }
+}
+
+// Some optional columns referenced in code may not exist yet on the live DB
+// (schema drift from migrations not yet applied). Strip any column Postgrest
+// reports as missing and retry, so writes still succeed with the fields that exist.
+function missingColumn(error: any): string | null {
+  const m = /Could not find the '([^']+)' column/.exec(error?.message ?? "");
+  return m ? m[1] : null;
+}
+
+async function insertTolerant(supabase: any, table: string, row: Record<string, any>, select: string) {
+  const payload = { ...row };
+  for (let i = 0; i < 20; i++) {
+    const { data, error } = await supabase.from(table).insert(payload).select(select).single();
+    if (!error) return data;
+    const col = missingColumn(error);
+    if (!col || !(col in payload)) throw error;
+    delete payload[col];
+  }
+  throw new Error("Could not save: too many incompatible columns.");
+}
+
+async function updateTolerant(supabase: any, table: string, patch: Record<string, any>, eq: [string, string]) {
+  const payload = { ...patch };
+  for (let i = 0; i < 20; i++) {
+    const { error } = await supabase.from(table).update(payload).eq(eq[0], eq[1]);
+    if (!error) return;
+    const col = missingColumn(error);
+    if (!col || !(col in payload)) throw error;
+    delete payload[col];
+  }
+  throw new Error("Could not save: too many incompatible columns.");
+}
+
 // -------- GROUPS --------
 
 export const listMyGroups = createServerFn({ method: "GET" })
@@ -431,11 +489,12 @@ export const startCasualRound = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const teeAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const courseName = data.courseName ?? "Casual round";
     const { data: tt, error } = await supabase
       .from("tee_times")
       .insert({
         group_id: data.groupId,
-        course_name: data.courseName ?? "Casual round",
+        course_name: courseName,
         tee_at: teeAt,
         spots: 4,
         format: "stableford" as any,
@@ -450,6 +509,13 @@ export const startCasualRound = createServerFn({ method: "POST" })
       { onConflict: "tee_time_id,user_id" },
     );
     await ensureTeeTimeHoles(supabase, tt.id);
+    // Notify the group chat so others can see a casual round has started
+    await supabase.from("messages").insert({
+      group_id: data.groupId,
+      user_id: userId,
+      kind: "announcement",
+      body: `casual_round_started:${courseName}`,
+    });
     return tt;
   });
 
@@ -1135,19 +1201,13 @@ export const getGroupHome = createServerFn({ method: "GET" })
     const isAdmin = membership?.role === "admin" || membership?.role === "coadmin";
 
     const now = new Date().toISOString();
-    const [{ data: next }, { data: trips }, { count: memberCount }, { data: lastMsg }, { data: lastAnnouncement }] = await Promise.all([
+    const [{ data: next }, { count: memberCount }, { data: lastMsg }, { data: lastAnnouncement }] = await Promise.all([
       supabase
         .from("tee_times")
         .select("id, course_name, tee_at, format, spots")
         .eq("group_id", data.groupId)
         .gte("tee_at", now)
         .order("tee_at", { ascending: true })
-        .limit(1),
-      supabase
-        .from("trips")
-        .select("id, name, destination, start_date, end_date")
-        .gte("end_date", new Date().toISOString().slice(0, 10))
-        .order("start_date", { ascending: true })
         .limit(1),
       supabase
         .from("group_members")
@@ -1196,6 +1256,25 @@ export const getGroupHome = createServerFn({ method: "GET" })
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
 
+    // Trips show on the overview only once an admin has confirmed the member's interest ("in").
+    let nextTrip: any = null;
+    const { data: confirmedMemberships } = await supabase
+      .from("trip_members")
+      .select("trip_id")
+      .eq("user_id", userId)
+      .eq("status", "in");
+    const confirmedTripIds = (confirmedMemberships ?? []).map((m: any) => m.trip_id);
+    if (confirmedTripIds.length) {
+      const { data: confirmedTrips } = await supabase
+        .from("trips")
+        .select("id, name, destination, start_date, end_date")
+        .in("id", confirmedTripIds)
+        .gte("end_date", new Date().toISOString().slice(0, 10))
+        .order("start_date", { ascending: true })
+        .limit(1);
+      nextTrip = confirmedTrips?.[0] ?? null;
+    }
+
     const { data: pendingRequests } = isAdmin
       ? await supabase
           .from("group_join_requests")
@@ -1207,7 +1286,7 @@ export const getGroupHome = createServerFn({ method: "GET" })
     return {
       group: { ...group, isAdmin },
       nextTeeTime: next?.[0] ?? null,
-      nextTrip: trips?.[0] ?? null,
+      nextTrip,
       pendingApprovals: pendingRequests?.length ?? 0,
       memberCount: memberCount ?? 0,
       rsvpCounts,
@@ -1261,7 +1340,8 @@ export const listUpcomingAcrossGroups = createServerFn({ method: "GET" })
 
 export const listTrips = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: any) => z.object({ groupId: z.string().uuid().optional() }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     // Try to query global trips first (requires is_global migration).
     // Fall back to all trips the user can see if the column doesn't exist yet.
@@ -1285,10 +1365,21 @@ export const listTrips = createServerFn({ method: "GET" })
     const tripIds = rows.map((r) => r.id);
     const { data: members } = await supabase
       .from("trip_members").select("trip_id, user_id, status").in("trip_id", tripIds);
+
+    // Scope the "interested" count to members of the current group only.
+    let groupUserIds: Set<string> | null = null;
+    if (data.groupId) {
+      const { data: gms } = await supabase
+        .from("group_members").select("user_id").eq("group_id", data.groupId);
+      groupUserIds = new Set((gms ?? []).map((m: any) => m.user_id));
+    }
+
     const interestMap = new Map<string, number>();
     const myStatusMap = new Map<string, string>();
     (members ?? []).forEach((m: any) => {
-      if (m.status !== "out") interestMap.set(m.trip_id, (interestMap.get(m.trip_id) ?? 0) + 1);
+      if (m.status !== "out" && (!groupUserIds || groupUserIds.has(m.user_id))) {
+        interestMap.set(m.trip_id, (interestMap.get(m.trip_id) ?? 0) + 1);
+      }
       if (m.user_id === userId) myStatusMap.set(m.trip_id, m.status);
     });
     return rows.map((r) => ({
@@ -1302,16 +1393,24 @@ export const getTrip = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { tripId: string }) => z.object({ tripId: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { data: trip, error } = await supabase
-      .from("trips").select("*").eq("id", data.tripId).single();
+      .from("trips").select("*").eq("id", data.tripId).maybeSingle();
     if (error) throw error;
+    if (!trip) throw new Error("Trip not found.");
     const isAdmin = checkIsOwner(context);
-    const { data: members } = await supabase
+    const { data: members, error: membersError } = await supabase
       .from("trip_members")
-      .select("user_id, status, note, created_at, profiles:user_id(display_name, avatar_url)")
-      .eq("trip_id", data.tripId)
-      .order("created_at", { ascending: true });
+      .select("*")
+      .eq("trip_id", data.tripId);
+    if (membersError) throw membersError;
+    const memberIds = Array.from(new Set((members ?? []).map((m: any) => m.user_id)));
+    const nameMap = new Map<string, string>();
+    if (memberIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles").select("id, display_name").in("id", memberIds);
+      (profs ?? []).forEach((p: any) => nameMap.set(p.id, p.display_name));
+    }
     const myMember = (members ?? []).find((m: any) => m.user_id === userId);
     return {
       trip,
@@ -1324,7 +1423,7 @@ export const getTrip = createServerFn({ method: "GET" })
           userId: m.user_id,
           status: m.status,
           note: m.note ?? "",
-          name: (m.profiles as any)?.display_name ?? "Member",
+          name: nameMap.get(m.user_id) ?? "Member",
         })),
     };
   });
@@ -1340,40 +1439,33 @@ export const createTrip = createServerFn({ method: "POST" })
       cost: z.number().min(0).optional(),
       maxSpots: z.number().int().min(1).max(200).optional(),
       bookingDeadline: z.string().optional(),
-      coverUrl: z.string().url().optional(),
+      coverUrl: z.string().max(10_000_000).optional(),
       notes: z.string().max(2000).optional(),
       inclusions: z.string().max(2000).optional(),
       highlights: z.array(z.string().max(200)).max(20).optional(),
       golfCourses: z.string().max(500).optional(),
-      agencyContact: z.string().max(200).optional(),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     if (!checkIsOwner(context)) throw new Error("Only the app owner can create trips.");
-    const { data: trip, error } = await supabase
-      .from("trips")
-      .insert({
-        name: data.name,
-        destination: data.destination,
-        start_date: data.startDate,
-        end_date: data.endDate,
-        cost: data.cost ?? null,
-        max_spots: data.maxSpots ?? 20,
-        booking_deadline: data.bookingDeadline ?? null,
-        cover_url: data.coverUrl ?? null,
-        notes: data.notes ?? null,
-        inclusions: data.inclusions ?? null,
-        highlights: data.highlights ?? [],
-        itinerary: [],
-        golf_courses: data.golfCourses ?? null,
-        agency_contact: data.agencyContact ?? null,
-        created_by: userId,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    return trip;
+    return insertTolerant(supabase, "trips", {
+      name: data.name,
+      destination: data.destination,
+      start_date: data.startDate,
+      end_date: data.endDate,
+      cost: data.cost ?? null,
+      max_spots: data.maxSpots ?? 20,
+      booking_deadline: data.bookingDeadline ?? null,
+      cover_url: data.coverUrl ?? null,
+      notes: data.notes ?? null,
+      inclusions: data.inclusions ?? null,
+      highlights: data.highlights ?? [],
+      itinerary: [],
+      golf_courses: data.golfCourses ?? null,
+      created_by: userId,
+      is_global: true,
+    }, "id");
   });
 
 export const updateTrip = createServerFn({ method: "POST" })
@@ -1388,12 +1480,11 @@ export const updateTrip = createServerFn({ method: "POST" })
       cost: z.number().min(0).optional(),
       maxSpots: z.number().int().min(1).max(200).optional(),
       bookingDeadline: z.string().optional(),
-      coverUrl: z.string().url().optional(),
+      coverUrl: z.string().max(10_000_000).optional(),
       notes: z.string().max(2000).optional(),
       inclusions: z.string().max(2000).optional(),
       highlights: z.array(z.string().max(200)).max(20).optional(),
       golfCourses: z.string().max(500).optional(),
-      agencyContact: z.string().max(200).optional(),
       status: z.enum(["open", "closed", "confirmed", "cancelled"]).optional(),
     }).parse(d),
   )
@@ -1413,9 +1504,18 @@ export const updateTrip = createServerFn({ method: "POST" })
     if (data.inclusions !== undefined) patch.inclusions = data.inclusions;
     if (data.highlights !== undefined) patch.highlights = data.highlights;
     if (data.golfCourses !== undefined) patch.golf_courses = data.golfCourses;
-    if (data.agencyContact !== undefined) patch.agency_contact = data.agencyContact;
     if (data.status !== undefined) patch.status = data.status;
-    const { error } = await supabase.from("trips").update(patch).eq("id", data.tripId);
+    await updateTolerant(supabase, "trips", patch, ["id", data.tripId]);
+    return { ok: true };
+  });
+
+export const deleteTrip = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: any) => z.object({ tripId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabase } = context;
+    if (!checkIsOwner(context)) throw new Error("Only the app owner can delete trips.");
+    const { error } = await supabase.from("trips").delete().eq("id", data.tripId);
     if (error) throw error;
     return { ok: true };
   });
@@ -1423,21 +1523,52 @@ export const updateTrip = createServerFn({ method: "POST" })
 export const expressInterest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: any) =>
-    z.object({ tripId: z.string().uuid(), note: z.string().max(300).optional() }).parse(d),
+    z.object({ tripId: z.string().uuid(), groupId: z.string().uuid().optional(), note: z.string().max(300).optional() }).parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const { data: trip } = await supabase
-      .from("trips").select("status").eq("id", data.tripId).single();
+      .from("trips").select("status, destination, name").eq("id", data.tripId).single();
     if (!trip) throw new Error("Trip not found.");
     if ((trip as any).status === "closed" || (trip as any).status === "cancelled") {
       throw new Error("This trip is no longer accepting interest.");
     }
-    const { error } = await supabase.from("trip_members").upsert(
-      { trip_id: data.tripId, user_id: userId, status: "maybe", note: data.note ?? null },
-      { onConflict: "trip_id,user_id" },
-    );
-    if (error) throw error;
+    {
+      const payload: Record<string, any> = { trip_id: data.tripId, user_id: userId, status: "maybe", note: data.note ?? null };
+      for (let i = 0; i < 20; i++) {
+        const { error } = await supabase.from("trip_members").upsert(payload, { onConflict: "trip_id,user_id" });
+        if (!error) break;
+        const col = missingColumn(error);
+        if (!col || !(col in payload)) throw error;
+        delete payload[col];
+      }
+    }
+
+    // Notify Auri Adventures of the new interest registration (best-effort, never block on failure).
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles").select("display_name").eq("id", userId).maybeSingle();
+      let groupName: string | null = null;
+      if (data.groupId) {
+        const { data: group } = await supabase
+          .from("groups").select("name").eq("id", data.groupId).maybeSingle();
+        groupName = group?.name ?? null;
+      }
+      await sendNotificationEmail({
+        to: "plan@auriadventure.com",
+        subject: `New trip interest: ${(trip as any).destination ?? (trip as any).name ?? data.tripId}`,
+        text: [
+          `Name: ${profile?.display_name ?? "A member"} (${auth?.user?.email ?? "unknown email"})`,
+          `Group: ${groupName ?? "Unknown"}`,
+          `Trip: ${(trip as any).name ?? ""} — ${(trip as any).destination ?? ""}`,
+          `Notes: ${data.note ? data.note : "—"}`,
+        ].join("\n"),
+      });
+    } catch (e) {
+      console.error("Failed to send interest notification email", e);
+    }
+
     return { ok: true };
   });
 
@@ -1463,6 +1594,21 @@ export const confirmTripMember = createServerFn({ method: "POST" })
     if (!checkIsOwner(context)) throw new Error("Only the app owner can confirm trip members.");
     const { error } = await supabase
       .from("trip_members").update({ status: "in" })
+      .eq("trip_id", data.tripId).eq("user_id", data.memberId);
+    if (error) throw error;
+    return { ok: true };
+  });
+
+export const unconfirmTripMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: any) =>
+    z.object({ tripId: z.string().uuid(), memberId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabase } = context;
+    if (!checkIsOwner(context)) throw new Error("Only the app owner can unconfirm trip members.");
+    const { error } = await supabase
+      .from("trip_members").update({ status: "maybe" })
       .eq("trip_id", data.tripId).eq("user_id", data.memberId);
     if (error) throw error;
     return { ok: true };

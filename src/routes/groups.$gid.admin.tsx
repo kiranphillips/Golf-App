@@ -128,16 +128,19 @@ function Page() {
               Invite code
             </label>
             <div className="flex items-center gap-2">
-              <p className="flex-1 font-mono text-2xl tracking-widest text-forest bg-paper rounded-xl py-2 px-3 text-center">
-                {code || "—"}
-              </p>
+              <input
+                ref={codeRef}
+                readOnly
+                value={code}
+                className="flex-1 font-mono text-2xl tracking-widest text-forest bg-paper rounded-xl py-2 px-3 text-center outline-none select-all"
+              />
               <button
-                onClick={() => copy(code, "Code")}
+                onClick={() => copyRef(codeRef, "Code", setCodeCopied)}
                 disabled={!code}
                 className="size-11 rounded-xl bg-paper border border-border grid place-items-center disabled:opacity-40"
                 aria-label="Copy code"
               >
-                <Copy className="size-4" />
+                {codeCopied ? <CheckCircle2 className="size-4 text-forest" /> : <Copy className="size-4" />}
               </button>
               <button
                 onClick={async () => {
@@ -161,16 +164,19 @@ function Page() {
               Invite link
             </label>
             <div className="flex items-center gap-2">
-              <p className="flex-1 text-xs text-muted-foreground bg-paper rounded-xl py-2.5 px-3 truncate">
-                {inviteLink || "—"}
-              </p>
+              <input
+                ref={linkRef}
+                readOnly
+                value={inviteLink}
+                className="flex-1 text-xs text-muted-foreground bg-paper rounded-xl py-2.5 px-3 truncate outline-none"
+              />
               <button
-                onClick={() => copy(inviteLink, "Link")}
+                onClick={() => copyRef(linkRef, "Link", setLinkCopied)}
                 disabled={!inviteLink}
                 className="size-11 rounded-xl bg-paper border border-border grid place-items-center disabled:opacity-40"
                 aria-label="Copy link"
               >
-                <Link2 className="size-4" />
+                {linkCopied ? <CheckCircle2 className="size-4 text-forest" /> : <Link2 className="size-4" />}
               </button>
             </div>
           </div>

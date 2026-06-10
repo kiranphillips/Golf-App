@@ -3,19 +3,20 @@ import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
+import { ImageUploadField } from "@/components/ImageUploadField";
 import { supabase } from "@/integrations/supabase/client";
-import { getTrip, expressInterest, withdrawInterest, confirmTripMember, updateTrip } from "@/lib/api.functions";
+import { getTrip, expressInterest, withdrawInterest, confirmTripMember, unconfirmTripMember, updateTrip, deleteTrip } from "@/lib/api.functions";
 import { fmtDateShort } from "@/lib/format";
 import { toast } from "sonner";
 import {
   ChevronLeft, MapPin, CalendarDays, Users, CheckCircle2, Clock,
-  Phone, Star, Loader2, Pencil, Globe, GolfIcon,
+  Phone, Star, Loader2, Pencil, Globe, GolfIcon, Trash2,
 } from "lucide-react";
 
 const q = (tid: string) =>
   queryOptions({ queryKey: ["trip", tid], queryFn: () => getTrip({ data: { tripId: tid } }) });
 
-export const Route = createFileRoute("/groups/$gid/trips/$tid")({
+export const Route = createFileRoute("/groups/$gid/trips_/$tid")({
   head: () => ({ meta: [{ title: "Trip — Fairway Club" }] }),
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
@@ -43,10 +44,13 @@ function Page() {
   const [interestBusy, setInterestBusy] = useState(false);
   const [note,       setNote]       = useState(data.myNote ?? "");
   const [showNote,   setShowNote]   = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const doInterest  = useServerFn(expressInterest);
   const doWithdraw  = useServerFn(withdrawInterest);
   const doConfirm   = useServerFn(confirmTripMember);
+  const doUnconfirm = useServerFn(unconfirmTripMember);
+  const doDelete    = useServerFn(deleteTrip);
 
   const trip    = data.trip as any;
   const myStatus = data.myStatus;
@@ -65,7 +69,7 @@ function Page() {
         await doWithdraw({ data: { tripId: tid } });
         toast.success("Interest withdrawn");
       } else {
-        await doInterest({ data: { tripId: tid, note: note || undefined } });
+        await doInterest({ data: { tripId: tid, groupId: gid, note: note || undefined } });
         toast.success("Interest registered! Auri Adventures will be in touch.");
       }
       qc.invalidateQueries({ queryKey: ["trip", tid] });
@@ -74,10 +78,32 @@ function Page() {
     finally { setInterestBusy(false); }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this trip? This cannot be undone.")) return;
+    setDeleteBusy(true);
+    try {
+      await doDelete({ data: { tripId: tid } });
+      toast.success("Trip deleted");
+      qc.invalidateQueries({ queryKey: ["trips-global"] });
+      navigate({ to: "/groups/$gid/trips", params: { gid } });
+    } catch (e: any) {
+      toast.error(e.message ?? "Couldn't delete trip");
+      setDeleteBusy(false);
+    }
+  };
+
   const handleConfirm = async (memberId: string, name: string) => {
     try {
       await doConfirm({ data: { tripId: tid, memberId } });
       toast.success(`${name} confirmed`);
+      qc.invalidateQueries({ queryKey: ["trip", tid] });
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const handleUnconfirm = async (memberId: string, name: string) => {
+    try {
+      await doUnconfirm({ data: { tripId: tid, memberId } });
+      toast.success(`${name} unconfirmed`);
       qc.invalidateQueries({ queryKey: ["trip", tid] });
     } catch (e: any) { toast.error(e.message); }
   };
@@ -107,14 +133,23 @@ function Page() {
           <ChevronLeft className="size-5" />
         </Link>
 
-        {/* Admin edit */}
+        {/* Admin edit / delete */}
         {isAdmin && (
-          <button
-            onClick={() => setEditing(v => !v)}
-            className="absolute top-12 right-5 size-9 rounded-full bg-black/30 backdrop-blur-sm grid place-items-center text-white"
-          >
-            <Pencil className="size-4" />
-          </button>
+          <div className="absolute top-12 right-5 flex items-center gap-2">
+            <button
+              onClick={handleDelete}
+              disabled={deleteBusy}
+              className="size-9 rounded-full bg-black/30 backdrop-blur-sm grid place-items-center text-white disabled:opacity-60"
+            >
+              {deleteBusy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            </button>
+            <button
+              onClick={() => setEditing(v => !v)}
+              className="size-9 rounded-full bg-black/30 backdrop-blur-sm grid place-items-center text-white"
+            >
+              <Pencil className="size-4" />
+            </button>
+          </div>
         )}
 
         {/* Status pill */}
@@ -165,7 +200,7 @@ function Page() {
             {trip.cost ? (
               <>
                 <p className="text-[10px] uppercase tracking-club text-muted-foreground">Price per person</p>
-                <p className="font-display text-3xl text-forest">£{Number(trip.cost).toLocaleString()}</p>
+                <p className="font-display text-3xl text-forest">${Number(trip.cost).toLocaleString()}</p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Price on request</p>
@@ -185,6 +220,9 @@ function Page() {
               )}
               {!alreadyInterested && showNote && (
                 <div className="flex flex-col gap-2 items-end">
+                  <p className="w-52 text-[10px] text-muted-foreground text-right leading-snug">
+                    Auri Adventures will email you to confirm your spot and share full trip details.
+                  </p>
                   <textarea
                     rows={2}
                     value={note}
@@ -306,9 +344,19 @@ function Page() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {m.status === "in" ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-forest">
-                          <CheckCircle2 className="size-3.5" /> Confirmed
-                        </span>
+                        <>
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-forest">
+                            <CheckCircle2 className="size-3.5" /> Confirmed
+                          </span>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleUnconfirm(m.userId, m.name)}
+                              className="px-2.5 py-1 bg-paper border border-border text-charcoal rounded-full text-[9px] font-bold uppercase tracking-club"
+                            >
+                              Unconfirm
+                            </button>
+                          )}
+                        </>
                       ) : (
                         <>
                           <span className="text-[10px] text-muted-foreground font-semibold">Interested</span>
@@ -373,7 +421,6 @@ function EditTripForm({ trip, onDone, onCancel }: { trip: any; onDone: () => voi
   const [notes,       setNotes]       = useState(trip.notes ?? "");
   const [inclusions,  setInclusions]  = useState(trip.inclusions ?? "");
   const [golfCourses, setGolfCourses] = useState(trip.golf_courses ?? "");
-  const [contact,     setContact]     = useState(trip.agency_contact ?? "");
   const [coverUrl,    setCoverUrl]    = useState(trip.cover_url ?? "");
   const [status,      setStatus]      = useState(trip.status ?? "open");
   const [busy,        setBusy]        = useState(false);
@@ -392,7 +439,6 @@ function EditTripForm({ trip, onDone, onCancel }: { trip: any; onDone: () => voi
           notes: notes || undefined,
           inclusions: inclusions || undefined,
           golfCourses: golfCourses || undefined,
-          agencyContact: contact || undefined,
           coverUrl: coverUrl || undefined,
           status: status as any,
         },
@@ -429,7 +475,7 @@ function EditTripForm({ trip, onDone, onCancel }: { trip: any; onDone: () => voi
           <input required type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={cls} />
         </label>
         <label className="block">
-          <span className={lbl}>Price pp (£)</span>
+          <span className={lbl}>Price pp ($)</span>
           <input type="number" min={0} step={0.01} value={cost} onChange={e => setCost(e.target.value)} className={cls} />
         </label>
         <label className="block">
@@ -450,8 +496,7 @@ function EditTripForm({ trip, onDone, onCancel }: { trip: any; onDone: () => voi
           </select>
         </label>
         <label className="col-span-2 block">
-          <span className={lbl}>Cover image URL</span>
-          <input type="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} className={cls} />
+          <ImageUploadField label="Cover image" value={coverUrl} onChange={setCoverUrl} />
         </label>
         <label className="col-span-2 block">
           <span className={lbl}>Golf courses</span>
@@ -464,10 +509,6 @@ function EditTripForm({ trip, onDone, onCancel }: { trip: any; onDone: () => voi
         <label className="col-span-2 block">
           <span className={lbl}>Overview</span>
           <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} className={cls} />
-        </label>
-        <label className="col-span-2 block">
-          <span className={lbl}>Contact</span>
-          <input value={contact} onChange={e => setContact(e.target.value)} className={cls} />
         </label>
       </div>
 
